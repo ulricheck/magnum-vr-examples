@@ -1,0 +1,192 @@
+addons:
+  apt:
+    packages:
+    - libgl1-mesa-dev
+    - g++-4.8
+    - ninja-build
+    - libsdl2-dev
+    - libglfw3-dev
+    - libopenal-dev
+    - libbullet-dev
+    - libbox2d-dev
+    - libglew-dev # needed by the triangle-sokol example
+
+matrix:
+  include:
+  - language: cpp
+    os: linux
+    dist: xenial
+    compiler: gcc
+    env:
+    - JOBID=linux-gl
+    - TARGET=desktop
+  - language: cpp
+    os: linux
+    dist: xenial
+    compiler: gcc
+    env:
+    - JOBID=linux-nondeprecated
+    - TARGET=desktop
+    - BUILD_DEPRECATED=OFF
+  - language: cpp
+    os: linux
+    dist: xenial
+    compiler: gcc
+    env:
+    - JOBID=linux-gles2
+    - TARGET=desktop-gles
+    - TARGET_GLES2=ON
+  - language: cpp
+    os: linux
+    dist: xenial
+    compiler: gcc
+    env:
+    - JOBID=linux-gles3
+    - TARGET=desktop-gles
+    - TARGET_GLES2=OFF
+  - language: cpp
+    os: linux
+    dist: xenial
+    compiler: gcc
+    env:
+    - JOBID=linux-vulkan
+    - TARGET=desktop-vulkan
+    addons:
+      apt:
+        packages:
+        - ninja-build
+  - language: cpp
+    os: osx
+    compiler: clang
+    env:
+    - JOBID=macos-gl
+    - TARGET=desktop
+  #- language: cpp
+    #os: osx
+    #osx_image: xcode7.3
+    #env:
+    #- JOBID=ios-gles2
+    #- TARGET=ios-simulator
+    #- TARGET_GLES2=ON
+  #- language: cpp
+    #os: osx
+    #osx_image: xcode7.3
+    #env:
+    #- JOBID=ios-gles3
+    #- TARGET=ios-simulator
+    #- TARGET_GLES2=OFF
+  - language: cpp
+    os: osx
+    osx_image: xcode9.3
+    env:
+    - JOBID=emscripten-webgl1
+    - TARGET=emscripten
+    - TARGET_GLES2=ON
+  - language: cpp
+    os: osx
+    osx_image: xcode9.3
+    env:
+    - JOBID=emscripten-webgl2
+    - TARGET=emscripten
+    - TARGET_GLES2=OFF
+  #- language: android
+    #os: linux
+    ## Setting xenial here will cause it to use 12.04, with GCC 4.6 and other
+    ## prehistoric nightmares. So staying with 14.04 for the time being.
+    #dist: trusty
+    #env:
+    #- JOBID=android-gles2
+    #- TARGET=android
+    #- TARGET_GLES2=ON
+    #addons:
+      #apt:
+        #packages:
+        #- ninja-build
+    #android:
+      #components:
+      #- build-tools-26.0.2
+      #- android-22
+  #- language: android
+    #os: linux
+    ## Setting xenial here will cause it to use 12.04, with GCC 4.6 and other
+    ## prehistoric nightmares. So staying with 14.04 for the time being.
+    #dist: trusty
+    #env:
+    #- JOBID=android-gles3
+    #- TARGET=android
+    #- TARGET_GLES2=OFF
+    #addons:
+      #apt:
+        #packages:
+        #- ninja-build
+    #android:
+      #components:
+      #- build-tools-26.0.2
+      #- android-22
+
+notifications:
+  webhooks:
+    urls:
+      - https://webhooks.gitter.im/e/00ec7a9066bb0fec98f3
+    on_success: change
+    on_failure: always
+    on_start: never
+
+cache:
+  directories:
+  - $HOME/sdl2
+  - $HOME/cmake
+  - $HOME/imgui
+
+before_install:
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "android" ]; then yes | sdkmanager "cmake;3.6.4111459"; fi
+
+install:
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ ! "$TARGET" == "android" ] && [ ! "$TARGET" == "desktop-vulkan" ]; then export CXX=g++-4.8; fi
+- if [ "$BUILD_DEPRECATED" != "OFF" ]; then export BUILD_DEPRECATED=ON; fi
+# box2d is not in homebrew anymore: https://github.com/erincatto/Box2D/issues/431
+- if [ "$TRAVIS_OS_NAME" == "linux" ]; then export PLATFORM_GL_API=GLX; export WITH_BOX2D=ON; fi
+- if [ ! "$WITH_BOX2D" == "ON" ]; then export WITH_BOX2D=OFF; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "android" ]; then wget -nc https://dl.google.com/android/repository/android-ndk-r16b-linux-x86_64.zip && unzip -q android-*.zip; fi
+# Download CMake 3.1.3 to ensure we're still compatible with it (Travis has
+# 3.9 since December 2017). Also, the PATH setting can't be cached, so it's
+# separate (bit me two times already). Android needs CMake 3.7, but
+# https://gitlab.kitware.com/cmake/cmake/issues/17253 is fixed in 3.9.2, so
+# grab that. FindVulkan is since 3.7, in that case just use the system package.
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ ! "$TARGET" == "desktop-vulkan" ] && [ ! "$TARGET" == "android" ] && [ ! -e "$HOME/cmake/bin" ]; then cd $HOME ; wget -nc --no-check-certificate https://cmake.org/files/v3.1/cmake-3.1.3-Linux-x86_64.tar.gz && mkdir -p cmake && cd cmake && tar --strip-components=1 -xzf ../cmake-3.1.3-Linux-x86_64.tar.gz && cd $TRAVIS_BUILD_DIR ; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "android" ] && [ ! -e "$HOME/cmake/bin" ]; then cd $HOME ; wget -nc --no-check-certificate https://cmake.org/files/v3.9/cmake-3.9.2-Linux-x86_64.tar.gz && mkdir -p cmake && cd cmake && tar --strip-components=1 -xzf ../cmake-3.9.2-Linux-x86_64.tar.gz && cd $TRAVIS_BUILD_DIR ; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ ! "$TARGET" == "desktop-vulkan" ]; then export PATH=$HOME/cmake/bin:$PATH && cmake --version; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install ninja; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "desktop" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install glew; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "desktop" ]; then export PLATFORM_GL_API=CGL; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "ios-simulator" ]; then gem install xcpretty; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "emscripten" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install emscripten && export LLVM=/usr/local/opt/emscripten/libexec/llvm/bin && emcc; fi
+- if [ "$TARGET_GLES2" == "ON" ]; then export TARGET_GLES3=OFF; fi
+- if [ "$TARGET_GLES2" == "OFF" ]; then export TARGET_GLES3=ON; fi
+
+# SDL (cached)
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "desktop" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install sdl2; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "ios-simulator" ]; then curl -O https://www.libsdl.org/release/SDL2-2.0.4.tar.gz && tar -xzvf SDL2-2.0.4.tar.gz && cd SDL2-2.0.4/Xcode-iOS/SDL && xcodebuild -sdk iphonesimulator9.3 | xcpretty && mkdir -p ../../../sdl2/lib && cp build/Release-iphonesimulator/libSDL2.a ../../../sdl2/lib && mkdir -p ../../../sdl2/include/SDL2 && cp -R ../../include/* ../../../sdl2/include/SDL2 && cd ../../..; fi
+
+# GLFW
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "desktop" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install glfw3; fi
+
+# Bullet
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "desktop" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install bullet; fi
+
+# ImGui
+- if [ ! -e "$HOME/imgui/imgui.h" ]; then cd $HOME ; wget -nc --no-check-certificate -O imgui.tar.gz https://github.com/ocornut/imgui/archive/v1.67.tar.gz && mkdir -p imgui && cd imgui && tar --strip-components=1 -xzf ../imgui.tar.gz && cd $TRAVIS_BUILD_DIR; fi
+
+script:
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "desktop" ]; then ./package/ci/travis-desktop.sh; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "desktop-gles" ]; then ./package/ci/travis-desktop-gles.sh; fi
+# Vulkan needs to be in a separate build, because it needs new CMake (for the
+# Find module) and in the future also C++14. Unfortunately that means we can't
+# apply the sanitizer or non-deprecated build on it.
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "desktop-vulkan" ]; then ./package/ci/travis-desktop-vulkan.sh; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TARGET" == "android" ]; then ./package/ci/travis-android-arm.sh; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "desktop" ]; then ./package/ci/travis-desktop.sh; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "ios-simulator" ]; then ./package/ci/travis-ios-simulator.sh; fi
+- if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TARGET" == "emscripten" ]; then ./package/ci/travis-emscripten.sh; fi
+# Travis somehow is not able to gather all output, try to force it using this
+- sync
